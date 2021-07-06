@@ -1,0 +1,7 @@
+pandas
+google.cloud
+google-cloud-vision
+google-cloud-pubsub
+google-cloud-storage
+datetime
+time
