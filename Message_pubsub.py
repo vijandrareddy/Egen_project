@@ -5,7 +5,9 @@ from google.cloud import pubsub_v1
 from concurrent import futures
 from  google.cloud import storage
 import time
-import schedule
+
+
+
 
 class publish:
     def __init__(self):
@@ -16,8 +18,8 @@ class publish:
         self.publish_futures = []
         
     def call_data_stream_api(self):
-        conn = http.HTTPSConnection("covid-api.mmediagroup.fr")
-        conn.request("GET", "/v1/cases?ab=us")
+        conn = http.HTTPSConnection("data.lacity.org")
+        conn.request("GET", "/resource/wjz9-h9np.json")
         response = conn.getresponse()
         response_data = response.read()
         print(response_data)
@@ -39,24 +41,16 @@ class publish:
                 print(f"Publishing {data} timed out.")
 
         return callback 
-
-    def call_scheduler(self):
-       
-        message = self.call_data_stream_api()
-        self.publish_message_to_topic(message)
+     
 
 if __name__ == "__main__":
+    print("Code Sarted")
+
     k=publish()
-    
-    #schedule will run every 5mins. 
-    schedule.every(5).minutes.do(k.call_scheduler)
-
-    while True:
-        # Checks whether a scheduled task is pending to run or not
-        schedule.run_pending()
-        time.sleep(1)
-
-    
+    for i in range(24):
+        message = k.call_data_stream_api()
+        k.publish_message_to_topic(message)
+        time.sleep(60)
     
 
 
