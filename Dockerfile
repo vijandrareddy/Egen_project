@@ -10,7 +10,7 @@ RUN pip install -r requirements.txt
 
 COPY  . .
 
-CMD ["python","./importpandas.py"]
+CMD ["python","./Message_pubsub.py"]
 
 
 
