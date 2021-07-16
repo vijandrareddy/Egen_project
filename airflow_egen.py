@@ -132,9 +132,6 @@ def delete_files_from_data_folder():
         source_blob.delete()
         print(f'File deleted from {source_blob}')
 
-# create_test_dataset = BigQueryCreateEmptyDatasetOperator(
-#     task_id='create_airflow_test_dataset', dataset_id=DATASET_NAME, dag=dag
-# )
 
 
 t1 = PythonOperator(
@@ -168,27 +165,7 @@ load_csv = GCSToBigQueryOperator(
     bucket='us-central1-egenproject-1a54d97d-bucket',
     source_objects=['data/parking_data.csv'],
     destination_project_dataset_table=f"{DATASET_NAME}.{TABLE_NAME}",
-    # schema_fields=[
-    #     {'name': 'ticket_number', 'type': 'INTEGER', 'mode': 'NULLABLE'},
-    #     {'name': 'issue_date', 'type': 'TIMESTAMP', 'mode': 'NULLABLE'},
-    #     {'name': 'issue_time', 'type': 'TIMESTAMP', 'mode': 'NULLABLE'},
-    #     {'name': 'rp_state_plate', 'type': 'STRING', 'mode': 'NULLABLE'},
-    #     {'name': 'plate_expiry_date', 'type': 'FLOAT', 'mode': 'NULLABLE'},
-    #     {'name': 'make', 'type': 'STRING', 'mode': 'NULLABLE'},
-    #     {'name': 'body_style', 'type': 'STRING', 'mode': 'NULLABLE'},
-    #     {'name': 'color', 'type': 'STRING', 'mode': 'NULLABLE'},
-    #     {'name': 'location', 'type': 'STRING', 'mode': 'NULLABLE'},
-    #     {'name': 'route', 'type': 'STRING', 'mode': 'NULLABLE'},
-    #     {'name': 'agency', 'type': 'INTEGER', 'mode': 'NULLABLE'},
-    #     {'name': 'violation_code', 'type': 'STRING', 'mode': 'NULLABLE'},
-    #     {'name': 'violation_description', 'type': 'STRING', 'mode': 'NULLABLE'},
-    #     {'name': 'fine_amount', 'type': 'FLOAT', 'mode': 'NULLABLE'},
-    #     {'name': 'latitude', 'type': 'FLOAT', 'mode': 'NULLABLE'},
-    #     {'name': 'longitude', 'type': 'FLOAT', 'mode': 'NULLABLE'},
-    #     {'name': 'meter_id', 'type': 'STRING', 'mode': 'NULLABLE'},
-    #     {'name': 'marked_time', 'type': 'TIMESTAMP', 'mode': 'NULLABLE'},
-
-    # ],
+   
     create_disposition='CREATE_IF_NEEDED',
     write_disposition='WRITE_TRUNCATE',
     dag=dag,
