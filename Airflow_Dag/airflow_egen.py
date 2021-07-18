@@ -1,10 +1,6 @@
 import os
-
 from airflow import models
-from airflow.providers.google.cloud.operators.bigquery import (
-    BigQueryCreateEmptyDatasetOperator,
-    BigQueryDeleteDatasetOperator,
-)
+import airflow.providers.google.cloud.operators.bigquery 
 from airflow.operators.python_operator import PythonOperator
 from airflow.providers.google.cloud.transfers.gcs_to_bigquery import GCSToBigQueryOperator
 from airflow.utils.dates import days_ago
@@ -19,19 +15,17 @@ from google.cloud.exceptions import NotFound
 DATASET_NAME = "egen"
 TABLE_NAME = "parking_citation"
 
-#python code
-
 
 dag = models.DAG(
-    dag_id='airflow',
+    dag_id='parking_citation_airflow',
     start_date=days_ago(2),
     schedule_interval=None,
-    tags=['example'],
+    tags=['egen'],
 )
 
 def create_dataset_if_not_exists():
     client = bigquery.Client()
-    projectid = "alert-impulse-317221"
+    projectid = "****"
     dataset_id =  "{}.egen".format(projectid)
     try:
         client.get_dataset(dataset_id)  
@@ -42,7 +36,7 @@ def create_dataset_if_not_exists():
 
 def create_table_if_not_exists():
     client = bigquery.Client()
-    table_id = "alert-impulse-317221.egen.parking_citations"
+    table_id = "*****.egen.parking_citation"
     
     try:
         client.get_table(table_id)
@@ -74,21 +68,26 @@ def create_table_if_not_exists():
 
 def read_and_transform_data() :
 
-    df_final = pd.DataFrame()
+    df_list=[]
     storage_client = storage.Client()
-    bucket_name = 'project-covid'
+    bucket_name = 'project_egen'
     bucket = storage_client.get_bucket(bucket_name)
     blobs_all = list(bucket.list_blobs())
-    blobs_specific = list(bucket.list_blobs(prefix='raw_data'))
+    blobs_specific = list(bucket.list_blobs(prefix='new_data'))
     blobs_specific.pop(0)
     
     for blobs in blobs_specific:  
         blob_name = str(blobs.name)
         blob = bucket.get_blob(blob_name)
-        content = blob.download_as_string()
+        content = blob.download_as_string()              
         df = pd.read_csv(BytesIO(content))
         print(df.head(5))
-        df_final.append(df)
+        df=df.drop(["meter_id","marked_time"], axis = 1)
+        df=df.dropna()
+        df_list.append(df)
+    df_final = pd.concat(df_list, axis=0, ignore_index=True)
+    
+    print(df_final)
         
     if not df_final.empty:
         print("Inside loading")
@@ -101,11 +100,11 @@ def read_and_transform_data() :
    
 
 def move_raw_files_to_historical_folder() :
-    bucket_name="project-covid"
+    bucket_name="project_egen"
     storage_client = storage.Client()
     bucket = storage_client.get_bucket(bucket_name)
     blobs_all = list(bucket.list_blobs())
-    blobs_specific = list(bucket.list_blobs(prefix='raw_data'))
+    blobs_specific = list(bucket.list_blobs(prefix='new_data'))
     blobs_specific.pop(0)
     
     
@@ -113,7 +112,7 @@ def move_raw_files_to_historical_folder() :
         blob_name = str(blobs.name)
         source_bucket = storage_client.get_bucket(bucket_name)
         source_blob = source_bucket.blob(blob_name)
-        new_blob_name = "update/" +  blob_name[blob_name.index("/")+1:]
+        new_blob_name = "historical_data/" +  blob_name[blob_name.index("/")+1:]
         new_blob = source_bucket.copy_blob(source_blob, source_bucket, new_blob_name)
         source_blob.delete()
         print(f'File moved from {source_blob} to {new_blob_name}')
@@ -134,49 +133,47 @@ def delete_files_from_data_folder():
 
 
 
-t1 = PythonOperator(
+
+task_1 = PythonOperator(
     task_id='create_dataset_if_not_exists',
     python_callable= create_dataset_if_not_exists ,
     dag=dag,
 )
 
-t2 = PythonOperator(
+task_2 = PythonOperator(
     task_id='create_table_if_not_exists',
     python_callable= create_table_if_not_exists ,
     dag=dag,
 )
 
-t3 = PythonOperator(
+task_3 = PythonOperator(
     task_id='read_and_transform_data',
     python_callable= read_and_transform_data ,
     dag=dag,
 )
 
-t4 = PythonOperator(
+task_4 = PythonOperator(
     task_id='move_raw_files_to_historical_folder',
     python_callable= move_raw_files_to_historical_folder ,
     dag=dag,
 )
 
-
-
-load_csv = GCSToBigQueryOperator(
+task_5 = GCSToBigQueryOperator(
     task_id='gcs_to_bigquery',
     bucket='us-central1-egenproject-1a54d97d-bucket',
     source_objects=['data/parking_data.csv'],
     destination_project_dataset_table=f"{DATASET_NAME}.{TABLE_NAME}",
-   
+    
     create_disposition='CREATE_IF_NEEDED',
     write_disposition='WRITE_TRUNCATE',
     dag=dag,
     skip_leading_rows = 1
 )
 
-
-t6 = PythonOperator(
+task_6 = PythonOperator(
     task_id='delete_data',
     python_callable=  delete_files_from_data_folder,
     dag=dag,
 )
 
-t1 >>t2 >> t3>> t4 >> load_csv >>t6
+task_1 >>task_2 >> task_3>> task_5 >> task_4 >>task_6
