@@ -18,8 +18,8 @@ def call_data_stream_api():
 
 
 def publish_message_to_topic(message):
-  project_id = "alert-impulse-317221"
-  topic_id = "covid_data"
+  project_id = "*****"
+  topic_id = "project_egen"
   publisher = PublisherClient()
   publish_futures = []
   topic_path = publisher.topic_path (project_id, topic_id)
