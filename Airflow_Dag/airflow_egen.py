@@ -26,7 +26,7 @@ dag = models.DAG(
 
 def create_dataset_if_not_exists():
     client = bigquery.Client()
-    projectid = "*******"
+    projectid = "alert-impulse-317221"
     dataset_id =  "{}.egen".format(projectid)
     try:
         client.get_dataset(dataset_id)  
@@ -38,7 +38,7 @@ def create_dataset_if_not_exists():
 
 def create_table_if_not_exists():
     client = bigquery.Client()
-    table_id = "*****.egen.parking_citation"
+    table_id = "alert-impulse-317221.egen.parking_citation"
     
     try:
         client.get_table(table_id)
@@ -140,7 +140,7 @@ def delete_files_from_data_folder():
 
 def create_staging_table_if_not_exists():
     client = bigquery.Client()
-    table_id = "******.egen.parking_citation_staging"
+    table_id = "alert-impulse-317221.egen.parking_citation_staging"
     
     try:
         client.get_table(table_id)
@@ -170,13 +170,13 @@ def create_staging_table_if_not_exists():
 
 
 
-def query_stackoverflow():
+def load_data_from_staging():
     client = bigquery.Client()
     query_job = client.query(
         
         """ 
-        merge into `****.egen.parking_citation` as a
-        using `****.egen.parking_citation_staging`  as b
+        merge into `alert-impulse-317221.egen.parking_citation` as a
+        using `alert-impulse-317221.egen.parking_citation_staging`  as b
         on a.ticket_number = b.ticket_number
         when not matched by target then 
         insert(ticket_number,issue_date,issue_time,rp_state_plate,plate_expiry_date,make,body_style,color,location,route,agency,violation_code,violation_description,fine_amount,latitude,longitude) 
@@ -211,13 +211,7 @@ task_4 = PythonOperator(
     dag=dag,
 )
 
-task_5 = PythonOperator(
-    task_id='move_raw_files_to_historical_folder',
-    python_callable= move_raw_files_to_historical_folder ,
-    dag=dag,
-)
-
-task_6 = GCSToBigQueryOperator(
+task_5 = GCSToBigQueryOperator(
     task_id='gcs_to_bigquery',
     bucket='us-central1-egenproject-1a54d97d-bucket',
     source_objects=['data/parking_data.csv'],
@@ -228,9 +222,15 @@ task_6 = GCSToBigQueryOperator(
     dag=dag,
     skip_leading_rows = 1
 )
+task_6 = PythonOperator(
+    task_id='load_data_from_staging',
+    python_callable= load_data_from_staging ,
+    dag=dag,
+)
+
 task_7 = PythonOperator(
-    task_id='query_stackoverflow',
-    python_callable= query_stackoverflow ,
+    task_id='move_raw_files_to_historical_folder',
+    python_callable= move_raw_files_to_historical_folder ,
     dag=dag,
 )
 
