@@ -1,6 +1,5 @@
 import os
 from airflow import models
-import airflow.providers.google.cloud.operators.bigquery 
 from airflow.operators.python_operator import PythonOperator
 from airflow.providers.google.cloud.transfers.gcs_to_bigquery import GCSToBigQueryOperator
 from airflow.utils.dates import days_ago
@@ -13,19 +12,21 @@ from google.cloud import bigquery
 from google.cloud.exceptions import NotFound
 
 DATASET_NAME = "egen"
-TABLE_NAME = "parking_citation"
+TABLE_NAME = "parking_citation_staging"
 
 
 dag = models.DAG(
     dag_id='parking_citation_airflow',
     start_date=days_ago(2),
-    schedule_interval=None,
+    
+    schedule_interval='0 7 * * *',
     tags=['egen'],
 )
 
+
 def create_dataset_if_not_exists():
     client = bigquery.Client()
-    projectid = "****"
+    projectid = "*******"
     dataset_id =  "{}.egen".format(projectid)
     try:
         client.get_dataset(dataset_id)  
@@ -33,6 +34,7 @@ def create_dataset_if_not_exists():
         dataset = bigquery.Dataset(dataset_id)
         dataset.location = "US"
         dataset = client.create_dataset(dataset, timeout=30)  
+
 
 def create_table_if_not_exists():
     client = bigquery.Client()
@@ -97,6 +99,7 @@ def read_and_transform_data() :
         blob=bucket.blob("data/parking_data" + ".csv")
         blob.upload_from_string(data=df_final.to_csv(index=False),content_type="text/csv") 
         print(df_final)
+
    
 
 def move_raw_files_to_historical_folder() :
@@ -116,6 +119,8 @@ def move_raw_files_to_historical_folder() :
         new_blob = source_bucket.copy_blob(source_blob, source_bucket, new_blob_name)
         source_blob.delete()
         print(f'File moved from {source_blob} to {new_blob_name}')
+
+
    
 def delete_files_from_data_folder():
     bucket_name="us-central1-egenproject-1a54d97d-bucket"
@@ -133,32 +138,86 @@ def delete_files_from_data_folder():
 
 
 
+def create_staging_table_if_not_exists():
+    client = bigquery.Client()
+    table_id = "******.egen.parking_citation_staging"
+    
+    try:
+        client.get_table(table_id)
+    except NotFound:
+        schema =[
+            bigquery.SchemaField('ticket_number', 'INTEGER', mode = 'NULLABLE'),
+            bigquery.SchemaField('issue_date', 'TIMESTAMP',  mode ='NULLABLE'),
+            bigquery.SchemaField('issue_time', 'TIMESTAMP',  mode ='NULLABLE'),
+            bigquery.SchemaField('rp_state_plate', 'STRING',  mode ='NULLABLE'),
+            bigquery.SchemaField('plate_expiry_date', 'FLOAT',  mode ='NULLABLE'),
+            bigquery.SchemaField('make', 'STRING',  mode ='NULLABLE'),
+            bigquery.SchemaField('body_style', 'STRING',  mode ='NULLABLE'),
+            bigquery.SchemaField('color', 'STRING',  mode ='NULLABLE'),
+            bigquery.SchemaField('location', 'STRING',  mode ='NULLABLE'),
+            bigquery.SchemaField('route', 'STRING',  mode ='NULLABLE'),
+            bigquery.SchemaField('agency', 'INTEGER',  mode ='NULLABLE'),
+            bigquery.SchemaField('violation_code', 'STRING',  mode ='NULLABLE'),
+            bigquery.SchemaField('violation_description', 'STRING',  mode ='NULLABLE'),
+            bigquery.SchemaField('fine_amount', 'FLOAT',  mode ='NULLABLE'),
+            bigquery.SchemaField('latitude', 'FLOAT',  mode ='NULLABLE'),
+            bigquery.SchemaField('longitude', 'FLOAT',  mode ='NULLABLE'),
+            bigquery.SchemaField('meter_id', 'STRING',  mode ='NULLABLE'),
+            bigquery.SchemaField('marked_time', 'TIMESTAMP',  mode ='NULLABLE')
+        ]
+        table = bigquery.Table(table_id, schema=schema)
+        table = client.create_table(table)  
+
+
+
+def query_stackoverflow():
+    client = bigquery.Client()
+    query_job = client.query(
+        
+        """ 
+        merge into `****.egen.parking_citation` as a
+        using `****.egen.parking_citation_staging`  as b
+        on a.ticket_number = b.ticket_number
+        when not matched by target then 
+        insert(ticket_number,issue_date,issue_time,rp_state_plate,plate_expiry_date,make,body_style,color,location,route,agency,violation_code,violation_description,fine_amount,latitude,longitude) 
+        values(b.ticket_number,b.issue_date,b.issue_time,b.rp_state_plate,b.plate_expiry_date,b.make,b.body_style,b.color,b.location,b.route,b.agency,b.violation_code,b.violation_description,b.fine_amount,b.latitude,b.longitude)  ;
+
+
+        """
+    )
+        
+       
 
 task_1 = PythonOperator(
     task_id='create_dataset_if_not_exists',
     python_callable= create_dataset_if_not_exists ,
     dag=dag,
 )
-
 task_2 = PythonOperator(
+    task_id='create_staging_table_if_not_exists',
+    python_callable= create_staging_table_if_not_exists ,
+    dag=dag,
+)
+
+task_3 = PythonOperator(
     task_id='create_table_if_not_exists',
     python_callable= create_table_if_not_exists ,
     dag=dag,
 )
 
-task_3 = PythonOperator(
+task_4 = PythonOperator(
     task_id='read_and_transform_data',
     python_callable= read_and_transform_data ,
     dag=dag,
 )
 
-task_4 = PythonOperator(
+task_5 = PythonOperator(
     task_id='move_raw_files_to_historical_folder',
     python_callable= move_raw_files_to_historical_folder ,
     dag=dag,
 )
 
-task_5 = GCSToBigQueryOperator(
+task_6 = GCSToBigQueryOperator(
     task_id='gcs_to_bigquery',
     bucket='us-central1-egenproject-1a54d97d-bucket',
     source_objects=['data/parking_data.csv'],
@@ -169,11 +228,17 @@ task_5 = GCSToBigQueryOperator(
     dag=dag,
     skip_leading_rows = 1
 )
+task_7 = PythonOperator(
+    task_id='query_stackoverflow',
+    python_callable= query_stackoverflow ,
+    dag=dag,
+)
 
-task_6 = PythonOperator(
+task_8 = PythonOperator(
     task_id='delete_data',
     python_callable=  delete_files_from_data_folder,
     dag=dag,
 )
 
-task_1 >>task_2 >> task_3>> task_5 >> task_4 >>task_6
+
+task_1 >> task_2 >> task_3 >> task_4 >> task_5 >> task_6 >> task_7 >> task_8
